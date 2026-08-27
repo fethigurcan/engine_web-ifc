@@ -110,37 +110,30 @@ void StreamMeshes(uint32_t modelID, const std::vector<uint32_t> &expressIds, ems
     // THATOPEN4D DEBUG-TRACE: @thatopen/fragments forces IfcAPI.SetLogLevel(
     // LOG_LEVEL_OFF) during import, so spdlog is completely silent and there is
     // no way to tell which element web-ifc is grinding on when a large model
-    // appears to "stall". Emit a raw stderr line per building element (bypasses
-    // spdlog / the log level) plus a SLOW line for the heavy ones. Gated behind
-    // the WEBIFC_GEOM_TRACE env var so normal builds/runs stay quiet.
-    static const bool _geomTrace = std::getenv("WEBIFC_GEOM_TRACE") != nullptr;
+    // appears to "stall". Emit a raw stderr line per building element (this
+    // bypasses spdlog / the log level entirely) plus a SLOW line for the heavy
+    // ones. Always on: this is the mem64-fixes debug branch. std::getenv() is
+    // not usable here -- Emscripten does not forward process.env to libc.
 
     for (const auto &id : expressIds)
     {
-        std::chrono::steady_clock::time_point _traceStart;
-        if (_geomTrace)
-        {
-            uint32_t typeCode = manager.GetIfcLoader(modelID)->GetLineType(id);
-            std::string typeName = manager.GetSchemaManager().IfcTypeCodeToType(typeCode);
-            fprintf(stderr, "[geom] %d/%d #%u %s\n", index + 1, total, id, typeName.c_str());
-            fflush(stderr);
-            _traceStart = std::chrono::steady_clock::now();
-        }
+        uint32_t _typeCode = manager.GetIfcLoader(modelID)->GetLineType(id);
+        std::string _typeName = manager.GetSchemaManager().IfcTypeCodeToType(_typeCode);
+        fprintf(stderr, "[geom] %d/%d #%u %s\n", index + 1, total, id, _typeName.c_str());
+        fflush(stderr);
+        auto _traceStart = std::chrono::steady_clock::now();
 
         // read the mesh from IFC
         webifc::geometry::IfcFlatMesh mesh = geomLoader->GetFlatMesh(id);
 
-        if (_geomTrace)
+        long long _ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - _traceStart)
+                            .count();
+        if (_ms >= 200)
         {
-            long long _ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - _traceStart)
-                                .count();
-            if (_ms >= 200)
-            {
-                fprintf(stderr, "[geom] #%u SLOW %lldms geoms=%zu\n", id, _ms,
-                        mesh.geometries.size());
-                fflush(stderr);
-            }
+            fprintf(stderr, "[geom] #%u SLOW %lldms geoms=%zu\n", id, _ms,
+                    mesh.geometries.size());
+            fflush(stderr);
         }
 
         // prepare the geometry data
