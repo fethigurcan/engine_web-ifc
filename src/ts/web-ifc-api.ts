@@ -514,7 +514,14 @@ export class IfcAPI {
     let s = this.CreateSettings(settings);
     let result = this.wasmModule.OpenModel(
       s,
-      (destPtr: number, offsetInSrc: number, destSize: number) => {
+      (destPtrRaw: number | bigint, offsetInSrcRaw: number | bigint, destSizeRaw: number | bigint) => {
+        // THATOPEN4D MEMORY64-PATCH: bei wasm64 sind Pointer + size_t als BigInt.
+        // Native JS-Operationen (Math.min, +, -, .subarray) erlauben kein Mixing
+        // von BigInt + Number. JS-`number` hat 2^53 Precision — fuer
+        // Heap-Adressen bis 16 GB (2^34) absolut sicher.
+        const destPtr = Number(destPtrRaw);
+        const offsetInSrc = Number(offsetInSrcRaw);
+        const destSize = Number(destSizeRaw);
         let srcSize = Math.min(data.byteLength - offsetInSrc, destSize);
         let dest = this.wasmModule.HEAPU8.subarray(destPtr, destPtr + srcSize);
         let src = data.subarray(offsetInSrc, offsetInSrc + srcSize);
@@ -550,7 +557,11 @@ export class IfcAPI {
     let s = this.CreateSettings(settings);
     let result = this.wasmModule.OpenModel(
       s,
-      (destPtr: number, offsetInSrc: number, destSize: number) => {
+      (destPtrRaw: number | bigint, offsetInSrcRaw: number | bigint, destSizeRaw: number | bigint) => {
+        // THATOPEN4D MEMORY64-PATCH: siehe OpenModel.
+        const destPtr = Number(destPtrRaw);
+        const offsetInSrc = Number(offsetInSrcRaw);
+        const destSize = Number(destSizeRaw);
         let data = callback(offsetInSrc, destSize);
         let srcSize = Math.min(data.byteLength, destSize);
         let dest = this.wasmModule.HEAPU8.subarray(destPtr, destPtr + srcSize);
@@ -642,7 +653,10 @@ export class IfcAPI {
    */
   SaveModel(modelID: number): Uint8Array {
     let dataBuffer: Uint8Array = new Uint8Array(0);
-    this.wasmModule.SaveModel(modelID, (srcPtr: number, srcSize: number) => {
+    this.wasmModule.SaveModel(modelID, (srcPtrRaw: number | bigint, srcSizeRaw: number | bigint) => {
+      // THATOPEN4D MEMORY64-PATCH: siehe OpenModel.
+      const srcPtr = Number(srcPtrRaw);
+      const srcSize = Number(srcSizeRaw);
       let origSize: number = dataBuffer.byteLength;
       let src = this.wasmModule.HEAPU8.subarray(srcPtr, srcPtr + srcSize);
       let newBuffer = new Uint8Array(origSize + srcSize);
@@ -659,7 +673,10 @@ export class IfcAPI {
    * @returns Buffer containing the model data
    */
   SaveModelToCallback(modelID: number, callback: ModelSaveCallback) {
-    this.wasmModule.SaveModel(modelID, (srcPtr: number, srcSize: number) => {
+    this.wasmModule.SaveModel(modelID, (srcPtrRaw: number | bigint, srcSizeRaw: number | bigint) => {
+      // THATOPEN4D MEMORY64-PATCH: siehe OpenModel.
+      const srcPtr = Number(srcPtrRaw);
+      const srcSize = Number(srcSizeRaw);
       let src = this.wasmModule.HEAPU8.subarray(srcPtr, srcPtr + srcSize);
       let newBuffer = new Uint8Array(srcSize);
       newBuffer.set(src);
@@ -1337,15 +1354,18 @@ export class IfcAPI {
       placementExpressId
     ) as Array<number>;
   }
-  GetVertexArray(ptr: number, size: number): Float32Array {
+  GetVertexArray(ptr: number | bigint, size: number | bigint): Float32Array {
     return this.getSubArray(this.wasmModule.HEAPF32, ptr, size);
   }
 
-  GetIndexArray(ptr: number, size: number): Uint32Array {
+  GetIndexArray(ptr: number | bigint, size: number | bigint): Uint32Array {
     return this.getSubArray(this.wasmModule.HEAPU32, ptr, size);
   }
 
-  getSubArray(heap: any, startPtr: number, sizeBytes: number) {
+  getSubArray(heap: any, startPtrRaw: number | bigint, sizeBytesRaw: number | bigint) {
+    // THATOPEN4D MEMORY64-PATCH: bei wasm64 sind Pointer + size_t BigInt.
+    const startPtr = Number(startPtrRaw);
+    const sizeBytes = Number(sizeBytesRaw);
     return heap.subarray(startPtr / 4, startPtr / 4 + sizeBytes).slice(0);
   }
 
